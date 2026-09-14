@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# mf-maximize: alterna maximizado (área útil) / tamanho anterior
+set -euo pipefail
+
+MAX_STATE="${XDG_CACHE_HOME:-$HOME/.cache}/mf-maximized"
+SIZE_STATE="${XDG_CACHE_HOME:-$HOME/.cache}/mf-prev-size"
+LOCK="${MAX_STATE}.lock"
+
+FOCUSED=$(hyprctl activewindow -j 2>/dev/null) || exit 0
+eval "$(printf '%s' "$FOCUSED" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+addr=d.get('address','')
+is_float=1 if d.get('floating') else 0
+at=d.get('at',[0,0])
+sz=d.get('size',[1200,750])
+print(f'ADDR={addr}')
+print(f'IS_FLOAT={is_float}')
+print(f'WIN_X={at[0]}')
+print(f'WIN_Y={at[1]}')
+print(f'WIN_W={sz[0]}')
+print(f'WIN_H={sz[1]}')
+" 2>/dev/null)" || exit 0
+
+[[ -z "$ADDR" || "$ADDR" == "null" ]] && exit 0
+
+(
+  flock -w 2 200 || exit 1
+
+  IS_MAXED=""
+  [[ -f "$MAX_STATE" ]] && IS_MAXED=$(grep "^$ADDR$" "$MAX_STATE" 2>/dev/null || true)
+
+  if [[ -n "$IS_MAXED" ]]; then
+    # Restaura tamanho anterior
+    [[ "$IS_FLOAT" != "1" ]] && hyprctl dispatch togglefloating "address:$ADDR" 2>/dev/null || true
+    sleep 0.05
+
+    PREV=$(grep "^$ADDR " "$SIZE_STATE" 2>/dev/null | head -1) || PREV=""
+    if [[ -n "$PREV" ]]; then
+      read -r _ PX PY PW PH <<< "$PREV"
+      hyprctl dispatch movewindowpixel "exact $PX $PY,address:$ADDR" 2>/dev/null || true
+      sleep 0.03
+      hyprctl dispatch resizewindowpixel "exact $PW $PH,address:$ADDR" 2>/dev/null || true
+      grep -v "^$ADDR " "$SIZE_STATE" > "${SIZE_STATE}.tmp" 2>/dev/null || true
+      mv "${SIZE_STATE}.tmp" "$SIZE_STATE"
+    else
+      hyprctl dispatch resizewindowpixel "exact 1200 750,address:$ADDR" 2>/dev/null || true
+      sleep 0.03
+      hyprctl dispatch centerwindow "address:$ADDR" 2>/dev/null || true
+    fi
+
+    grep -v "^$ADDR$" "$MAX_STATE" > "${MAX_STATE}.tmp" 2>/dev/null || true
+    mv "${MAX_STATE}.tmp" "$MAX_STATE"
+  else
+    # Salva posição atual e maximiza
+    {
+      grep -v "^$ADDR " "$SIZE_STATE" 2>/dev/null || true
+      echo "$ADDR $WIN_X $WIN_Y $WIN_W $WIN_H"
+    } > "${SIZE_STATE}.tmp"
+    mv "${SIZE_STATE}.tmp" "$SIZE_STATE"
+
+    [[ "$IS_FLOAT" != "1" ]] && hyprctl dispatch togglefloating "address:$ADDR" 2>/dev/null || true
+    sleep 0.05
+
+    # Descobre área útil do monitor (excluindo a barra)
+    MON_JSON=$(hyprctl monitors -j 2>/dev/null) || MON_JSON="[]"
+    eval "$(printf '%s' "$MON_JSON" | python3 -c "
+import sys,json
+ms=json.load(sys.stdin)
+m=next((x for x in ms if x.get('focused')),ms[0] if ms else {})
+res=m.get('reserved',[0,0,0,0])
+x=int(m.get('x',0)+res[3])
+y=int(m.get('y',0)+res[0])
+w=int(m.get('width',1920)-res[3]-res[1])
+h=int(m.get('height',1080)-res[0]-res[2])
+print(f'MON_X={x} MON_Y={y} MON_W={w} MON_H={h}')
+" 2>/dev/null)" || { MON_X=0; MON_Y=0; MON_W=1920; MON_H=1080; }
+
+    hyprctl dispatch movewindowpixel "exact $MON_X $MON_Y,address:$ADDR" 2>/dev/null || true
+    sleep 0.03
+    hyprctl dispatch resizewindowpixel "exact $MON_W $MON_H,address:$ADDR" 2>/dev/null || true
+    echo "$ADDR" >> "$MAX_STATE"
+  fi
+) 200>"$LOCK"

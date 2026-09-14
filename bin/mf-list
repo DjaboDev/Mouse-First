@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# mf-list: retorna JSON com janelas minimizadas
+set -euo pipefail
+
+STATE="${XDG_CACHE_HOME:-$HOME/.cache}/mf-minimized"
+
+hyprctl clients -j 2>/dev/null | python3 -c "
+import sys, json, os
+
+state_file = os.path.expanduser('${STATE}')
+order = []
+try:
+    with open(state_file) as f:
+        for line in f:
+            parts = line.strip().split()
+            if parts:
+                order.append(parts[0])
+except FileNotFoundError:
+    pass
+
+clients = json.load(sys.stdin)
+minimized = [
+    c for c in clients
+    if c.get('workspace', {}).get('name', '') in ('special:minimized', 'special:mf-minimized')
+]
+
+addr_index = {addr: i for i, addr in enumerate(order)}
+minimized.sort(key=lambda c: addr_index.get(c['address'], 9999))
+
+result = [
+    {
+        'address': c['address'],
+        'title': c.get('title', '')[:60],
+        'class': c.get('class', ''),
+        'workspace': c.get('workspace', {}).get('id', 1)
+    }
+    for c in minimized
+]
+print(json.dumps(result))
+" 2>/dev/null || echo "[]"

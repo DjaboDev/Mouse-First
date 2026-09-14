@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# mf-minimize [address] [target_ws]: envia janela para special:minimized ou special:mf-minimized
+set -euo pipefail
+
+STATE="${XDG_CACHE_HOME:-$HOME/.cache}/mf-minimized"
+LOCK="${STATE}.lock"
+TARGET="${1:-}"
+TARGET_WS="${2:-special:minimized}"
+
+if [[ -n "$TARGET" ]]; then
+  eval "$(hyprctl clients -j 2>/dev/null | python3 -c "
+import sys,json
+cs = json.load(sys.stdin)
+target = '$TARGET'.lower()
+found = False
+for c in cs:
+    if c.get('address','').lower() == target:
+        print(f'ADDR={c.get(\"address\")}')
+        print(f'WS={c.get(\"workspace\",{}).get(\"id\",1)}')
+        found = True
+        break
+if not found:
+    print(f'ADDR={target}')
+    print('WS=1')
+" 2>/dev/null)" || exit 0
+else
+  FOCUSED=$(hyprctl activewindow -j 2>/dev/null) || exit 0
+  eval "$(printf '%s' "$FOCUSED" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+addr=d.get('address','')
+ws=d.get('workspace',{}).get('id',1)
+print(f'ADDR={addr}')
+print(f'WS={ws}')
+" 2>/dev/null)" || exit 0
+fi
+
+[[ -z "$ADDR" || "$ADDR" == "null" ]] && exit 0
+
+(
+  flock -w 2 200 || exit 1
+  TMP=$(mktemp)
+  echo "$ADDR $WS" > "$TMP"
+  [[ -f "$STATE" ]] && grep -v "^$ADDR " "$STATE" >> "$TMP" || true
+  head -50 "$TMP" > "$STATE"
+  rm -f "$TMP"
+) 200>"$LOCK"
+
+hyprctl dispatch "hl.dsp.window.move({ workspace = '$TARGET_WS', window = 'address:$ADDR', follow = false })" >/dev/null 2>&1 || hyprctl dispatch -- movetoworkspacesilent "$TARGET_WS,address:$ADDR" >/dev/null 2>&1 || true
+
+# Refocus topmost remaining window on active workspace so focus is not orphaned on special workspace
+TOP=$(hyprctl clients -j 2>/dev/null | python3 -c "
+import sys, json
+try:
+    cs = json.load(sys.stdin)
+    vis = [c for c in cs if c.get('workspace',{}).get('id') == $WS and c.get('mapped') and not c.get('hidden') and c.get('address') != '$ADDR']
+    if vis:
+        vis.sort(key=lambda x: x.get('focusHistoryID', 999))
+        print(vis[0].get('address', ''))
+except Exception:
+    pass
+" 2>/dev/null) || TOP=""
+
+if [[ -n "$TOP" ]]; then
+  hyprctl dispatch "hl.dsp.focus({ window = 'address:$TOP' })" >/dev/null 2>&1 || true
+fi

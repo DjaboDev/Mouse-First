@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# mf-theme: lê colors.toml do tema ativo e retorna JSON com as cores relevantes
+# Saída: {"background":"#1a1b26","foreground":"#a9b1d6","accent":"#7aa2f7",
+#          "muted":"#414868","mode":"dark"}
+
+set -euo pipefail
+
+THEME_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/current/theme"
+COLORS_FILE="$THEME_DIR/colors.toml"
+
+if [[ ! -f "$COLORS_FILE" ]]; then
+    # Fallback: retorna cores escuras padrão se o tema não for encontrado
+    echo '{"background":"#1a1b26","foreground":"#a9b1d6","accent":"#7aa2f7","muted":"#414868","darker_background":"#0e0e14","lighter_background":"#24283b","mode":"dark"}'
+    exit 0
+fi
+
+python3 - "$COLORS_FILE" << 'PYEOF'
+import sys, json, re
+
+path = sys.argv[1]
+keys = {}
+with open(path) as f:
+    for line in f:
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        m = re.match(r'^(\w+)\s*=\s*"([^"]*)"', line)
+        if not m:
+            m = re.match(r'^(\w+)\s*=\s*([^\s#]+)', line)
+        if m:
+            keys[m.group(1)] = m.group(2).strip('"')
+
+result = {
+    'background':        keys.get('background',        keys.get('bg',         '#1a1b26')),
+    'darker_background': keys.get('darker_background', keys.get('darker_bg',  '#0e0e14')),
+    'lighter_background':keys.get('lighter_background',keys.get('lighter_bg', '#24283b')),
+    'foreground':        keys.get('foreground',        keys.get('fg',         '#a9b1d6')),
+    'bright_foreground': keys.get('bright_foreground', keys.get('bright_fg',  '#c0caf5')),
+    'accent':            keys.get('accent',            keys.get('color4',     '#7aa2f7')),
+    'muted':             keys.get('muted',             keys.get('color8',     '#414868')),
+    'red':               keys.get('red',               keys.get('color1',     '#f7768e')),
+    'mode':              keys.get('mode', 'dark'),
+}
+print(json.dumps(result))
+PYEOF

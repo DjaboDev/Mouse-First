@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+# mf-apps: retorna lista consolidada de aplicativos e janelas para a barra do sistema
+import sys, json, os, glob, subprocess
+
+# Constrói índice de ícones do sistema com persistência em disco para inicialização instantânea
+cache_dir = os.path.expanduser("~/.cache/omarchy")
+cache_file = os.path.join(cache_dir, "mf-icon-cache.json")
+icon_cache = {}
+
+if os.path.exists(cache_file):
+    try:
+        # Revalida se o cache tem menos de 24h
+        if os.path.getmtime(cache_file) > os.path.getmtime("/usr/share/applications"):
+            with open(cache_file, "r", encoding="utf-8") as f:
+                icon_cache = json.load(f)
+    except Exception:
+        icon_cache = {}
+
+if not icon_cache:
+    icon_dirs = [
+        os.path.expanduser("~/.local/share/icons"),
+        os.path.expanduser("~/.icons"),
+        "/usr/local/share/icons",
+        "/usr/share/icons/hicolor",
+        "/usr/share/icons",
+        "/usr/share/pixmaps"
+    ]
+
+    for d in icon_dirs:
+        if not os.path.isdir(d):
+            continue
+        for root_dir, _, files in os.walk(d):
+            for f in files:
+                if f.endswith(".png") or f.endswith(".svg"):
+                    stem = os.path.splitext(f)[0]
+                    if stem not in icon_cache or f.endswith(".svg"):
+                        path = os.path.join(root_dir, f)
+                        icon_cache[stem] = path
+                        icon_cache[stem.lower()] = path
+
+    try:
+        os.makedirs(cache_dir, exist_ok=True)
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(icon_cache, f)
+    except Exception:
+        pass
+
+def resolve_icon(icon_name):
+    if not icon_name:
+        return ""
+    if icon_name.startswith("file://"):
+        return icon_name
+    if icon_name.startswith("/"):
+        return f"file://{icon_name}"
+    if icon_name in icon_cache:
+        return f"file://{icon_cache[icon_name]}"
+    if icon_name.lower() in icon_cache:
+        return f"file://{icon_cache[icon_name.lower()]}"
+    for ext in ["svg", "png", "xpm"]:
+        pix = f"/usr/share/pixmaps/{icon_name}.{ext}"
+        if os.path.exists(pix):
+            return f"file://{pix}"
+    fallback = icon_cache.get("application-x-executable") or icon_cache.get("application-default-icon")
+    return f"file://{fallback}" if fallback else ""
+
+dock_cfg = os.path.expanduser("~/.config/omarchy/dock.json")
+pinned_ids = []
+if os.path.exists(dock_cfg):
+    try:
+        with open(dock_cfg) as f:
+            pinned_ids = json.load(f).get("pinned", [])
+    except Exception:
+        pass
+
+# Cache de aplicativos desktop
+desktop_apps = {}
+desktop_dirs = [
+    os.path.expanduser("~/.local/share/applications"),
+    "/usr/local/share/applications",
+    "/usr/share/applications"
+]
+
+for d in desktop_dirs:
+    if not os.path.exists(d):
+        continue
+    for p in glob.glob(os.path.join(d, "*.desktop")):
+        base = os.path.basename(p)
+        app_key = base[:-8] if base.endswith(".desktop") else base
+        if app_key in desktop_apps:
+            continue
+        try:
+            name = app_key
+            icon = app_key
+            wmclass = ""
+            with open(p, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("Name=") and name == app_key:
+                        name = line[5:]
+                    elif line.startswith("Icon=") and icon == app_key:
+                        icon = line[5:]
+                    elif line.startswith("StartupWMClass=") and not wmclass:
+                        wmclass = line[16:]
+            info = {"name": name, "icon": resolve_icon(icon), "appId": app_key}
+            desktop_apps[app_key] = info
+            desktop_apps[app_key.lower()] = info
+            if wmclass:
+                desktop_apps[wmclass] = info
+                desktop_apps[wmclass.lower()] = info
+        except Exception:
+            pass
+
+clients = []
+try:
+    clients = json.loads(subprocess.check_output(["hyprctl", "clients", "-j"], stderr=subprocess.DEVNULL))
+except Exception:
+    pass
+
+result = []
+matched_addrs = set()
+
+# 1. Processa aplicativos fixados
+for pid in pinned_ids:
+    info = desktop_apps.get(pid) or desktop_apps.get(pid.lower()) or {
+        "name": pid,
+        "icon": resolve_icon(pid),
+        "appId": pid
+    }
+    
+    # Busca janelas correspondentes a este app fixado
+    app_clients = []
+    for c in clients:
+        c_cls = c.get("class", "")
+        c_init = c.get("initialClass", "")
+        c_title = c.get("title", "")
+        if (pid == c_cls or pid.lower() == c_cls.lower() or 
+            pid == c_init or pid.lower() == c_init.lower() or 
+            (pid.lower() in c_title.lower() and c_cls.lower() not in ("foot", "org.omarchy.screensaver"))):
+            app_clients.append(c)
+            matched_addrs.add(c.get("address"))
+            
+    if not app_clients:
+        result.append({
+            "appId": pid,
+            "name": info["name"],
+            "icon": info["icon"],
+            "title": "",
+            "state": "closed",
+            "address": "",
+            "pinned": True
+        })
+    else:
+        # Prioridade de seleção: ativa > em execução > minimizada
+        active_c = next((c for c in app_clients if c.get("focusHistoryID") == 0), None)
+        running_c = next((c for c in app_clients if not c.get("workspace", {}).get("name", "").startswith("special:")), None)
+        min_c = next((c for c in app_clients if c.get("workspace", {}).get("name", "").startswith("special:")), None)
+        
+        c_chosen = active_c or running_c or min_c or app_clients[0]
+        ws_name = c_chosen.get("workspace", {}).get("name", "")
+        
+        if ws_name.startswith("special:"):
+            state = "minimized"
+        elif c_chosen.get("focusHistoryID") == 0:
+            state = "active"
+        else:
+            state = "running"
+            
+        result.append({
+            "appId": pid,
+            "name": info["name"],
+            "icon": info["icon"],
+            "title": c_chosen.get("title", ""),
+            "state": state,
+            "address": c_chosen.get("address", ""),
+            "pinned": True
+        })
+
+# 2. Processa janelas abertas que não estão na lista de fixados
+for c in clients:
+    addr = c.get("address")
+    if addr in matched_addrs:
+        continue
+    c_cls = c.get("class", "")
+    c_init = c.get("initialClass", "")
+    info = (desktop_apps.get(c_cls) or desktop_apps.get(c_cls.lower()) or 
+            desktop_apps.get(c_init) or desktop_apps.get(c_init.lower()) or 
+            {"name": c_cls or "App", "icon": resolve_icon(c_cls or "application-x-executable"), "appId": c_cls})
+    
+    ws_name = c.get("workspace", {}).get("name", "")
+    if ws_name.startswith("special:"):
+        state = "minimized"
+    elif c.get("focusHistoryID") == 0:
+        state = "active"
+    else:
+        state = "running"
+        
+    result.append({
+        "appId": info.get("appId", c_cls),
+        "name": info["name"],
+        "icon": info["icon"],
+        "title": c.get("title", ""),
+        "state": state,
+        "address": addr,
+        "pinned": False
+    })
+
+print(json.dumps(result))

@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# mf-restore [address]: restaura janela do special workspace
+set -euo pipefail
+
+STATE="${XDG_CACHE_HOME:-$HOME/.cache}/mf-minimized"
+LOCK="${STATE}.lock"
+TARGET="${1:-}"
+
+(
+  flock -w 2 200 || exit 1
+
+  REAL=$(hyprctl clients -j 2>/dev/null | python3 -c "
+import sys,json
+cs=json.load(sys.stdin)
+print('\n'.join(c['address'] for c in cs
+  if c.get('workspace',{}).get('name','') in ('special:minimized', 'special:mf-minimized')))
+" 2>/dev/null) || REAL=""
+
+  if [[ -z "$TARGET" ]]; then
+    if [[ -f "$STATE" ]]; then
+      while IFS=' ' read -r addr ws; do
+        if printf '%s\n' "$REAL" | grep -qF "$addr"; then
+          TARGET="$addr"; TWS="$ws"; break
+        fi
+      done < "$STATE"
+    fi
+    if [[ -z "$TARGET" ]]; then
+      TARGET=$(echo "$REAL" | head -1)
+      TWS="1"
+    fi
+  else
+    TWS=$(grep "^$TARGET " "$STATE" 2>/dev/null | awk '{print $2}' | head -1)
+    TWS="${TWS:-1}"
+  fi
+
+  [[ -z "$TARGET" ]] && exit 0
+
+  if [[ -f "$STATE" ]]; then
+    grep -v "^$TARGET " "$STATE" > "${STATE}.tmp" 2>/dev/null || true
+    mv "${STATE}.tmp" "$STATE"
+  fi
+
+  hyprctl dispatch "hl.dsp.window.move({ workspace = '$TWS', window = 'address:$TARGET', follow = true })" >/dev/null 2>&1 || hyprctl dispatch -- movetoworkspace "$TWS,address:$TARGET" >/dev/null 2>&1 || true
+  sleep 0.05
+  hyprctl dispatch "hl.dsp.window.bring_to_top({ window = 'address:$TARGET' })" >/dev/null 2>&1 || true
+  hyprctl dispatch "hl.dsp.focus({ window = 'address:$TARGET' })" >/dev/null 2>&1 || hyprctl dispatch -- focuswindow "address:$TARGET" >/dev/null 2>&1 || true
+) 200>"$LOCK"
