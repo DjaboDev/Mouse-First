@@ -265,8 +265,29 @@ Item {
         function onDisableTilingChanged() { root.applyTilingRule() }
     }
 
+    // Native moves handed over by the Lua module (see DragController).
     Connections {
-        target: tracker
+        target: trackerModule
+        function onNativeDragStarted(address, x, y, rect) {
+            if (dragModule.pressed) return   // our own drag is moving it
+            var w = trackerModule.active
+            var win = w && w.address === address
+                ? Object.assign({}, w, rect)
+                : Object.assign({ address: address, floating: true, fullscreen: 0, monitor: "", workspace: "" }, rect)
+            dragModule.takeOver(win, x, y)
+        }
+        function onCursorMoved(x, y) {
+            if (dragModule.handedOver) dragModule.move(x, y)
+        }
+        function onButtonReleased(x, y) {
+            if (!dragModule.handedOver) return
+            dragModule.move(x, y)
+            dragModule.release()
+        }
+    }
+
+    Connections {
+        target: trackerModule
         function onWindowClosed(address) {
             if (root.sessionOffsets[address]) {
                 var s = Object.assign({}, root.sessionOffsets)

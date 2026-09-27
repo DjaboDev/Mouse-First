@@ -10,6 +10,10 @@ import "js/hypr.js" as Hypr
 //
 // A maximized or snapped window is restored the moment the drag starts and
 // placed so the point the user grabbed stays under the cursor.
+//
+// Native moves (SUPER + drag, app title bars) are handed over by the Lua
+// module through takeOver(); the cursor then arrives as tracker reports
+// instead of overlay mouse events, and everything else is shared.
 Item {
     id: root
     visible: false
@@ -20,6 +24,7 @@ Item {
 
     readonly property bool pressed: _win !== null
     property bool active: false
+    property bool handedOver: false
     property string address: ""
     // Where the window is being drawn right now (updated on every motion,
     // ahead of the compositor), and the snap target if one is armed.
@@ -38,6 +43,16 @@ Item {
         if (!win || root._win) return
         root._win = win
         root._press = { x: gx, y: gy }
+    }
+
+    // Continue a drag Hyprland started. The threshold has already been passed,
+    // so the drag begins immediately.
+    function takeOver(win, gx, gy) {
+        if (root._win || !win) return
+        root._win = win
+        root._press = { x: gx, y: gy }
+        root.handedOver = true
+        root._begin(gx, gy)
     }
 
     function move(gx, gy) {
@@ -125,6 +140,7 @@ Item {
     function _reset() {
         root.states.dragging = false
         root.active = false
+        root.handedOver = false
         root._win = null
         root._press = null
         root._start = null

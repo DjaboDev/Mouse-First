@@ -162,6 +162,9 @@ Item {
         if (e) {
             if (G.rectsMatch(win, e.target)) {
                 if (!e.confirmed) e.confirmed = true
+            } else if (root.tracker.buttonDown) {
+                // A drag may be starting; the drag controller takes it over
+                // and restores the window itself. Decide once it is released.
             } else if (e.confirmed || Date.now() - e.since > root.settleMs) {
                 if (G.sizesMatch(win, e.target) && win.fullscreen === 0) root._beginNativeDrop(win, e)
                 else root.clear(win.address)   // resized by the user: now free

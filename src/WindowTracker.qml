@@ -19,8 +19,8 @@ Item {
     property var active: null
     // [{ name, x, y, w, h, reserved: { left, top, right, bottom } }]
     property var monitors: []
-    // Left button state as reported by the compositor; `buttonKnown` stays
-    // false if this Hyprland build cannot report it.
+    // Left button state, reported by the module's non-consuming binds;
+    // `buttonKnown` stays false until the first report arrives.
     property bool buttonDown: false
     property bool buttonKnown: false
     property bool installed: false
@@ -29,6 +29,10 @@ Item {
     signal windowClosed(string address)
     signal windowOpened(string address)
     signal buttonReleased(real x, real y)
+    // Hyprland started moving `address` (SUPER + drag or a title bar) and
+    // handed the drag over; cursor reports follow until the button is released.
+    signal nativeDragStarted(string address, real x, real y, var rect)
+    signal cursorMoved(real x, real y)
     signal configReloaded()
 
     readonly property string moduleSource: luaFile.text()
@@ -134,10 +138,18 @@ Item {
         } else if (kind === "button") {
             var b = payload.split(",")
             var down = b[0] === "1"
-            if (down) root.buttonKnown = true
+            root.buttonKnown = true
             var wasDown = root.buttonDown
             root.buttonDown = down
             if (wasDown && !down) root.buttonReleased(Number(b[1]), Number(b[2]))
+        } else if (kind === "cursor") {
+            var c = payload.split(",")
+            root.cursorMoved(Number(c[0]), Number(c[1]))
+        } else if (kind === "native") {
+            var n = payload.split(",")
+            if (n.length < 7) return
+            root.nativeDragStarted(Hypr.normalizeAddress(n[0]), Number(n[1]), Number(n[2]),
+                { x: Number(n[3]), y: Number(n[4]), w: Number(n[5]), h: Number(n[6]) })
         }
     }
 

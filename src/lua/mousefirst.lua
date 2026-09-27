@@ -20,7 +20,6 @@ M.generation = MOUSE_FIRST_GENERATION
 
 local SEP = "\31"
 local MINIMIZED = "special:minimized"
-local BTN_LEFT = 272
 
 local function clean(value)
   return (tostring(value or ""):gsub("[\r\n\31]", " "))
@@ -66,16 +65,87 @@ local function monitor_state()
   return table.concat(parts, ";")
 end
 
--- Whether the left button is held, so the shell knows when a native
--- (SUPER + drag) move ends. Returns nil when the compositor cannot tell.
-local function button_state()
-  local ok, down = pcall(hl.is_key_down, BTN_LEFT)
-  if not ok then return nil end
-  return down and 1 or 0
+-- Left-button tracking. Hyprland's Lua API cannot read mouse buttons, so two
+-- non-consuming binds (press and release, any modifiers) record them without
+-- taking the click away from apps or from Hyprland's own binds.
+local function cursor()
+  local c = hl.get_cursor_pos() or { x = 0, y = 0 }
+  return round(c.x), round(c.y)
+end
+
+local function on_press()
+  M.button_down = true
+  M.down_rect = nil
+  M.taken = false
+  local x, y = cursor()
+  emit("button", "1," .. x .. "," .. y)
+end
+
+local function on_release()
+  M.button_down = false
+  M.taken = false
+  local x, y = cursor()
+  emit("button", "0," .. x .. "," .. y)
+end
+
+local function remove_binds()
+  for _, b in ipairs(M.binds or {}) do pcall(function() b:remove() end) end
+  M.binds = {}
+end
+
+local function install_binds()
+  remove_binds()
+  local opts = { non_consuming = true, transparent = true, ignore_mods = true, description = "Mouse-First: track left button" }
+  local ok1, press = pcall(hl.bind, "mouse:272", on_press, opts)
+  local ok2, release = pcall(hl.bind, "mouse:272", on_release,
+    { non_consuming = true, transparent = true, ignore_mods = true, release = true, description = "Mouse-First: track left button" })
+  if ok1 and press then table.insert(M.binds, press) end
+  if ok2 and release then table.insert(M.binds, release) end
+end
+
+-- Native moves (SUPER + drag, or an app's own title bar). Hyprland places the
+-- window at "start position + pointer delta" for the whole drag, so a window
+-- restored from a snap mid-drag would drift away from the cursor, and the
+-- shell cannot preview or apply snaps. As soon as a floating window starts
+-- moving under a held button, the drag is handed to the shell: Hyprland's
+-- drag is ended (the drag dispatcher ends the current drag when called
+-- outside a button press) and the shell moves the window from then on,
+-- following the cursor reports below until the button is released.
+local function watch_native_move()
+  if not M.button_down then return end
+  local w = hl.get_active_window()
+  if not w or not w.floating then return end
+  local r = { a = w.address, x = round(w.at.x), y = round(w.at.y), w = round(w.size.x), h = round(w.size.y), fs = tonumber(w.fullscreen) or 0 }
+
+  if M.taken then
+    local x, y = cursor()
+    if x ~= M.last_cx or y ~= M.last_cy then
+      M.last_cx, M.last_cy = x, y
+      emit("cursor", x .. "," .. y)
+    end
+    return
+  end
+
+  local d = M.down_rect
+  if not d or d.a ~= r.a then
+    M.down_rect = r
+    return
+  end
+  local moved = math.abs(r.x - d.x) >= 2 or math.abs(r.y - d.y) >= 2
+  local sameSize = math.abs(r.w - d.w) <= 2 and math.abs(r.h - d.h) <= 2
+  if moved and (sameSize or d.fs ~= 0) and r.fs == 0 then
+    M.taken = true
+    hl.dispatch(hl.dsp.window.drag())
+    local x, y = cursor()
+    M.last_cx, M.last_cy = x, y
+    emit("native", table.concat({ r.a, x, y, r.x, r.y, r.w, r.h }, ","))
+  else
+    M.down_rect = r
+  end
 end
 
 function M.resend()
-  M.last_window, M.last_monitors, M.last_button = nil, nil, nil
+  M.last_window, M.last_monitors = nil, nil
 end
 
 function M.tick()
@@ -91,12 +161,7 @@ function M.tick()
     emit("window", win)
   end
 
-  local btn = button_state()
-  if btn ~= nil and btn ~= M.last_button then
-    M.last_button = btn
-    local c = hl.get_cursor_pos() or { x = 0, y = 0 }
-    emit("button", table.concat({ btn, round(c.x), round(c.y) }, ","))
-  end
+  watch_native_move()
 end
 
 -- "Disable tiling" is a real window rule, so windows open floating instead of
@@ -159,8 +224,10 @@ function M.stop(generation)
   if generation and generation ~= M.generation then return end
   if M.timer then M.timer:set_enabled(false) end
   if M.float_rule then M.float_rule:set_enabled(false) end
+  remove_binds()
 end
 
 M.migrate_legacy_minimized()
+install_binds()
 M.resend()
 M.timer = hl.timer(M.tick, { timeout = 16, type = "repeat" })

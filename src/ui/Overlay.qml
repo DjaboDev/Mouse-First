@@ -39,7 +39,7 @@ PanelWindow {
     color: "transparent"
 
     mask: Region {
-        Region { item: overlay.hosting && overlay.svc.drag.pressed ? content : null }
+        Region { item: overlay.hosting && overlay.svc.drag.pressed && !overlay.svc.drag.handedOver ? content : null }
         Region { item: overlay.settingsHere ? content : null }
         Region { item: dragZone.enabled ? dragZone : null }
         Region { item: bubble.visible ? bubble : null }
