@@ -2,18 +2,19 @@
   "schemaVersion": 1,
   "id": "io.github.mousefirst.controls",
   "name": "Mouse-First",
-  "description": "Brings intuitive mouse-driven window management to Hyprland. Features floating window controls (minimize, maximize, close), easy top-edge dragging, smart edge snapping with multi-monitor and full dock support, and seamless app minimization directly to the top system bar.",
-  "version": "0.1.0",
+  "description": "Mouse-driven window management for Hyprland: minimize, maximize and close buttons on every window, drag windows by their top edge, edge and corner snapping with multi-monitor support, and app icons on the system bar.",
+  "version": "0.2.0",
   "author": "Djabo",
+  "homepage": "https://github.com/DjaboDev/Mouse-First",
   "license": "MIT",
-  "kinds": ["bar-widget"],
-  "keepLoaded": true,
+  "kinds": ["service", "bar-widget"],
   "entryPoints": {
+    "service": "Service.qml",
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
     "displayName": "Mouse-First",
-    "description": "Floating window controls with window dragging for mouse users",
+    "description": "App icons for pinned, open and minimized windows",
     "category": "System",
     "defaultSection": "left",
     "allowMultiple": false
