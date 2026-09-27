@@ -189,6 +189,12 @@ Item {
     property int  dragStartWinH:     600
     property bool dragNeedsDispatch: false
 
+    // Polling adaptativo: detecta arrasto nativo (Super+LMB / titlebar) e acelera polling
+    property int  lastPolledX:       -9999
+    property int  lastPolledY:       -9999
+    property int  windowMovingCount: 0
+    property bool isNativeDragging:  false
+
     // Zonas de Snapping (Aero Snap / Light Tiling)
     property string snapZone:        ""
     property int    snapTargetX:     0
@@ -410,7 +416,7 @@ Item {
     // ── Polling de Janela Ativa para acompanhar Resize e Super-Drag ──
     Timer {
         id: activeWinTimer
-        interval: 120
+        interval: root.isNativeDragging ? 32 : 120
         repeat: true
         onTriggered: {
             if (!root.isDragging && !root.dragInitiated && !settleTimer.running && !activeWinProc.running) {
@@ -498,6 +504,24 @@ Item {
                                 var movedAway = (Math.hypot(rawX - snapInfo.snapX, rawY - snapInfo.snapY) > 25)
                                 var sizeChanged = (!atSnapSize)
                                 if (movedAway || sizeChanged) {
+                                    // Se a janela foi movida mas mantém o tamanho snap, restaurar tamanho original (un-snap nativo)
+                                    if (movedAway && atSnapSize && snapInfo.w > 0 && snapInfo.h > 0 && curMouseX > 0) {
+                                        var sWSnap = (overlayRoot.width > 0 ? overlayRoot.width : Screen.width)
+                                        var sHSnap = (overlayRoot.height > 0 ? overlayRoot.height : Screen.height)
+                                        var isWebSnap = /brave|chrome|chromium/i.test(w.class || w.initialClass || "")
+                                        var maxCapW = isWebSnap ? Math.floor(sWSnap * 0.85) : Math.min(1050, Math.floor(sWSnap * 0.55))
+                                        var maxCapH = isWebSnap ? Math.floor(sHSnap * 0.80) : Math.min(700, Math.floor(sHSnap * 0.65))
+                                        var restW = Math.max(500, Math.min(snapInfo.w, maxCapW))
+                                        var restH = Math.max(350, Math.min(snapInfo.h, maxCapH))
+                                        // Posicionar proporcionalmente sob o cursor
+                                        var ratioSnap = Math.max(0.15, Math.min(0.85, (curMouseX - rawX) / (rawW > 0 ? rawW : 800)))
+                                        var newSnapX = root.clampWinX(Math.round(curMouseX - restW * ratioSnap), restW)
+                                        var newSnapY = root.clampWinY(Math.round(curMouseY - 14), restH)
+                                        var addrSnap = root.cleanAddr(w.address)
+                                        if (addrSnap) {
+                                            root.applyWindowGeometry(addrSnap, newSnapX, newSnapY, restW, restH)
+                                        }
+                                    }
                                     var snapMapClean = Object.assign({}, root.preSnapSizes)
                                     delete snapMapClean[w.address]
                                     root.preSnapSizes = snapMapClean
@@ -520,6 +544,29 @@ Item {
                     root.winW     = Math.round(rawW)
                     root.winH     = Math.round(rawH)
                     root.hasWindow = true
+
+                    // ── Detecção de arrasto nativo para polling adaptativo ──
+                    if (!root.isDragging && !root.dragInitiated) {
+                        var posChanged = (Math.abs(root.winX - root.lastPolledX) > 3 || Math.abs(root.winY - root.lastPolledY) > 3)
+                        root.lastPolledX = root.winX
+                        root.lastPolledY = root.winY
+                        if (posChanged && root.winFloat) {
+                            root.windowMovingCount = Math.min(root.windowMovingCount + 1, 10)
+                            if (root.windowMovingCount >= 2) {
+                                root.isNativeDragging = true
+                            }
+                        } else {
+                            if (root.windowMovingCount > 0) {
+                                root.windowMovingCount = root.windowMovingCount - 1
+                            }
+                            if (root.windowMovingCount <= 0) {
+                                root.isNativeDragging = false
+                            }
+                        }
+                    } else {
+                        root.isNativeDragging = false
+                        root.windowMovingCount = 0
+                    }
 
                     // Proteção inteligente contra janelas e webapps que abrem maiores que a tela ou sob a barra do sistema
                     if (root.winFloat && !root.winMax && !root.preSnapSizes[w.address] && !root.isDragging && !root.dragInitiated && root.winW >= 200 && root.winH >= 200) {
