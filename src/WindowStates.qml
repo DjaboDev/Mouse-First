@@ -58,7 +58,7 @@ Item {
         return G.monitorAt(root.tracker.monitors, x, y)
     }
 
-    function areaFor(monitor) {
+    function areaFor(monitor, gapOverride) {
         if (!monitor) return G.rect(0, 0, 1920, 1080)
         var r = monitor.reserved
         if (root.ignoreDock && root.dockPresent) {
@@ -68,7 +68,7 @@ Item {
                 bottom: root.barPosition === "bottom" ? root.barThickness : 0
             }
         }
-        return G.usableArea(monitor, r, root.gap)
+        return G.usableArea(monitor, r, gapOverride === undefined ? root.gap : gapOverride)
     }
 
     // What "restore" should return this window to.
@@ -180,7 +180,8 @@ Item {
     function _fitOnce(win) {
         if (root.fitted[win.address]) return
         root.fitted[win.address] = true
-        var r = G.fitInside(win, root.areaFor(root.monitorOf(win)))
+        // Measured without gaps: a window flush against the bar is fine.
+        var r = G.fitInside(win, root.areaFor(root.monitorOf(win), 0))
         if (r) root.apply(win.address, r)
     }
 
