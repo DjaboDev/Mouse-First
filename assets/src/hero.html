@@ -1,0 +1,189 @@
+<!doctype html>
+<!-- Source of preview.png (the README and marketplace image). Render with scripts/render-hero.sh. -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #0e0e14; --panel: #16161e; --win: #1a1b26; --line: rgba(255,255,255,.08);
+    --fg: #c0caf5; --dim: #a9b1d6; --muted: #565f89; --accent: #7aa2f7;
+    --red: #f7768e; --green: #9ece6a; --yellow: #e0af68; --purple: #bb9af7; --cyan: #7dcfff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; }
+  body {
+    font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", monospace;
+    color: var(--fg);
+    background:
+      radial-gradient(900px 600px at 78% 40%, rgba(122,162,247,.18), transparent 70%),
+      radial-gradient(700px 500px at 10% 100%, rgba(187,154,247,.10), transparent 70%),
+      var(--bg);
+    position: relative;
+  }
+
+  /* ── Left column ───────────────────────────── */
+  .intro { position: absolute; left: 96px; top: 205px; width: 660px; }
+  .kicker { display: inline-flex; gap: 10px; align-items: center; font-size: 19px; color: var(--accent);
+            border: 1px solid rgba(122,162,247,.35); padding: 8px 16px; border-radius: 999px; background: rgba(122,162,247,.08); }
+  .kicker i { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; }
+  h1 { font-size: 92px; line-height: 1; margin: 34px 0 24px; letter-spacing: -4px; font-weight: 800; white-space: nowrap; }
+  h1 span { color: var(--accent); }
+  .tag { font-size: 27px; line-height: 1.45; color: var(--dim); margin-bottom: 44px; }
+  ul { list-style: none; display: grid; gap: 20px; }
+  li { display: flex; align-items: center; gap: 18px; font-size: 21px; color: var(--fg); }
+  li b { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+         background: rgba(122,162,247,.12); border: 1px solid rgba(122,162,247,.25); color: var(--accent); font-size: 18px; flex: none; }
+  .install { margin-top: 48px; display: inline-flex; align-items: center; gap: 14px; font-size: 19px;
+             padding: 14px 20px; border-radius: 12px; background: #0b0b10; border: 1px solid var(--line); color: var(--dim); }
+  .install em { color: var(--green); font-style: normal; }
+
+  /* ── Screen ────────────────────────────────── */
+  .screen { position: absolute; left: 790px; top: 215px; width: 1040px; height: 660px; border-radius: 18px; overflow: hidden;
+            border: 1px solid rgba(255,255,255,.10);
+            box-shadow: 0 40px 120px rgba(0,0,0,.55), 0 0 0 10px rgba(255,255,255,.02);
+            background:
+              radial-gradient(520px 340px at 70% 20%, rgba(247,118,142,.35), transparent 70%),
+              radial-gradient(600px 400px at 20% 90%, rgba(122,162,247,.35), transparent 70%),
+              linear-gradient(160deg, #2a1e4a, #1b1f3b 55%, #141629); }
+  .bar { position: absolute; left: 0; right: 0; top: 0; height: 30px; background: rgba(14,14,20,.92);
+         display: flex; align-items: center; padding: 0 12px; gap: 8px; font-size: 13px; color: var(--dim); }
+  .ws { display: flex; gap: 6px; align-items: center; margin-right: 8px; }
+  .ws i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); display: block; }
+  .ws i.on { width: 20px; border-radius: 4px; background: var(--fg); }
+  .app { position: relative; width: 22px; height: 22px; border-radius: 5px; display: grid; place-items: center; font-size: 11px; font-weight: 800; color: #0e0e14; }
+  .tile { width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; position: relative; }
+  .tile.active { background: rgba(255,255,255,.14); border: 1px solid rgba(122,162,247,.5); }
+  .tile.running { background: rgba(255,255,255,.06); }
+  .tile .dot { position: absolute; bottom: 1px; left: 50%; transform: translateX(-50%); width: 4px; height: 2px; border-radius: 1px; background: var(--accent); }
+  .tile.active .dot { width: 10px; }
+  .badge { position: absolute; right: -4px; top: -1px; min-width: 13px; height: 13px; border-radius: 7px; background: var(--accent);
+           color: #0e0e14; font-size: 9px; font-weight: 800; display: grid; place-items: center; padding: 0 3px; }
+  .clock { position: absolute; left: 50%; transform: translateX(-50%); }
+  .tray { margin-left: auto; display: flex; gap: 10px; }
+  .tray i { width: 12px; height: 8px; border-radius: 2px; background: var(--muted); display: block; }
+
+  .window { position: absolute; background: rgba(26,27,38,.97); border-radius: 10px; border: 1px solid rgba(255,255,255,.08); overflow: hidden;
+            box-shadow: 0 14px 40px rgba(0,0,0,.45); }
+  .window.focus { border-color: rgba(122,162,247,.8); }
+  .content { padding: 18px 20px; font-size: 13px; line-height: 1.75; color: var(--dim); }
+  .content .p { color: var(--accent); } .content .g { color: var(--green); } .content .y { color: var(--yellow); }
+  .content .r { color: var(--purple); } .content .m { color: var(--muted); }
+
+  .capsule { position: absolute; top: 0; right: 0; height: 30px; padding: 0 5px; display: flex; gap: 3px; align-items: center;
+             background: #0e0e14; border: 1px solid rgba(255,255,255,.18); border-radius: 9px; }
+  .capsule b { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; position: relative; }
+  .capsule b.hover { background: rgba(230,50,50,.75); }
+  .capsule .min { width: 10px; height: 2px; border-radius: 1px; background: rgba(255,255,255,.85); }
+  .capsule .max { width: 10px; height: 10px; border-radius: 2px; border: 1.5px solid rgba(255,255,255,.85); }
+  .capsule .x::before, .capsule .x::after { content: ""; position: absolute; left: 50%; top: 50%; width: 12px; height: 1.8px;
+             background: rgba(255,255,255,.9); border-radius: 1px; }
+  .capsule .x::before { transform: translate(-50%,-50%) rotate(45deg); }
+  .capsule .x::after { transform: translate(-50%,-50%) rotate(-45deg); }
+  .capsule .handle { position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); width: 26px; height: 2px; border-radius: 1px; background: var(--accent); opacity: .85; }
+  .dragline { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 42%; height: 3px; border-radius: 2px; background: var(--accent); opacity: .7; }
+
+  .preview { position: absolute; border-radius: 12px; border: 2px solid var(--accent); background: rgba(122,162,247,.16); }
+
+  .menu { position: absolute; width: 250px; background: #0e0e14; border: 1px solid rgba(255,255,255,.14); border-radius: 10px; padding: 6px;
+          box-shadow: 0 18px 40px rgba(0,0,0,.5); font-size: 13px; }
+  .menu div { height: 30px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 6px; color: var(--fg); }
+  .menu div.hi { background: rgba(255,255,255,.08); }
+  .menu div i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: block; flex: none; }
+  .menu div i.dim { opacity: .5; }
+  .menu hr { border: 0; height: 1px; background: rgba(255,255,255,.08); margin: 4px 6px; }
+  .menu .danger { color: var(--red); }
+
+  .cursor { position: absolute; width: 22px; height: 30px; }
+
+  /* ── Callouts ──────────────────────────────── */
+  .callout { position: absolute; font-size: 16px; color: var(--fg); background: rgba(14,14,20,.92); border: 1px solid rgba(122,162,247,.45);
+             padding: 8px 14px; border-radius: 999px; white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+  .callout::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: 10px; vertical-align: 1px; }
+</style>
+</head>
+<body>
+  <section class="intro">
+    <div class="kicker"><i></i>Omarchy plugin · Hyprland</div>
+    <h1>Mouse<span>-</span>First</h1>
+    <p class="tag">Desktop-style window management<br>for Hyprland on Omarchy.</p>
+    <ul>
+      <li><b>▣</b>Minimize, maximize and close on every window</li>
+      <li><b>✥</b>Drag by the top edge, across monitors</li>
+      <li><b>◧</b>Edge and corner snapping from any drag</li>
+      <li><b>⇆</b>Snapped windows resize together</li>
+      <li><b>▤</b>App icons on the bar, grouped per app</li>
+    </ul>
+    <div class="install"><em>$</em> omarchy plugin add github.com/DjaboDev/Mouse-First</div>
+  </section>
+
+  <section class="screen">
+    <div class="bar">
+      <div class="ws"><i class="on"></i><i></i><i></i><i></i></div>
+      <div class="tile active"><div class="app" style="background:var(--green)">❯</div><span class="badge">2</span><span class="dot"></span></div>
+      <div class="tile running"><div class="app" style="background:var(--accent)">W</div><span class="dot"></span></div>
+      <div class="tile running"><div class="app" style="background:var(--yellow)">F</div><span class="dot"></span></div>
+      <div class="tile"><div class="app" style="background:var(--purple)">M</div></div>
+      <div class="tile"><div class="app" style="background:var(--red)">S</div></div>
+      <span class="clock">Monday 16:40</span>
+      <div class="tray"><i></i><i></i><i></i><i></i></div>
+    </div>
+
+    <!-- Left half: snapped terminal -->
+    <div class="window focus" style="left:10px; top:40px; width:505px; height:610px;">
+      <div class="content">
+        <div><span class="p">~/projects</span> <span class="g">❯</span> git status</div>
+        <div>On branch <span class="r">main</span></div>
+        <div class="g">nothing to commit, working tree clean</div>
+        <div><span class="p">~/projects</span> <span class="g">❯</span> node --test tests/</div>
+        <div><span class="g">✓</span> snapZone: edges, corners and free space</div>
+        <div><span class="g">✓</span> followEdge keeps a neighbour against the edge</div>
+        <div><span class="g">✓</span> restoreUnderCursor keeps the grab point</div>
+        <div class="m">  tests 18 · pass 18 · fail 0</div>
+        <div><span class="p">~/projects</span> <span class="g">❯</span> <span style="background:var(--fg);color:var(--fg)">_</span></div>
+      </div>
+      <div class="capsule" style="top:0; right:0;"><b><span class="min"></span></b><b><span class="max"></span></b><b class="hover"><span class="x"></span></b><span class="handle"></span></div>
+    </div>
+
+    <!-- Top-right quarter: editor -->
+    <div class="window" style="left:525px; top:40px; width:505px; height:300px;">
+      <div class="content">
+        <div><span class="m">1</span>  <span class="r">function</span> <span class="p">snap</span>(win, zone) {</div>
+        <div><span class="m">2</span>    <span class="r">const</span> area = usableArea(monitor)</div>
+        <div><span class="m">3</span>    <span class="r">const</span> target = zoneRect(zone, area)</div>
+        <div><span class="m">4</span>    apply(win, target)</div>
+        <div><span class="m">5</span>  }</div>
+        <div><span class="m">6</span></div>
+        <div><span class="m">7</span>  <span class="m">// half screen, quarter, or maximize</span></div>
+      </div>
+    </div>
+
+    <!-- Bottom-right: snap preview + window being dragged into it -->
+    <div class="preview" style="left:525px; top:350px; width:505px; height:300px;"></div>
+    <div class="window" style="left:612px; top:392px; width:380px; height:240px; opacity:.96;">
+      <span class="dragline"></span>
+      <div class="content" style="padding-top:22px">
+        <div class="y">▸ Documents</div>
+        <div class="y">▸ Downloads</div>
+        <div class="y">▸ Pictures</div>
+        <div>  mouse-first.json</div>
+        <div>  notes.md</div>
+      </div>
+    </div>
+    <svg class="cursor" style="left:790px; top:396px" viewBox="0 0 22 30"><path d="M2 2 L2 24 L8 18 L12 28 L16 26 L12 17 L20 17 Z" fill="#fff" stroke="#111" stroke-width="1.5" stroke-linejoin="round"/></svg>
+
+    <!-- Right-click menu on the grouped terminal icon -->
+    <div class="menu" style="left:52px; top:34px;">
+      <div class="hi"><i></i>~/projects — zsh</div>
+      <div><i class="dim"></i>~/dotfiles — nvim</div>
+      <hr>
+      <div>New window</div>
+      <div>Unpin from dock</div>
+      <div class="danger">Close all windows</div>
+    </div>
+  </section>
+
+  <span class="callout" style="left:1120px; top:163px;">Window controls on every window</span>
+  <span class="callout" style="left:1440px; top:901px;">Snap preview while you drag</span>
+  <span class="callout" style="left:790px; top:163px;">Grouped app icons</span>
+</body>
+</html>

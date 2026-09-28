@@ -5,14 +5,10 @@
 </p>
 
 <p align="center">
-  <img src="preview.png" alt="Mouse-First window controls on Omarchy" width="100%">
+  <img src="preview.png" alt="Mouse-First: window controls, snapping and grouped app icons on Omarchy" width="100%">
 </p>
 
 Mouse-First adds the desktop conveniences mouse users expect to Hyprland: minimize, maximize and close buttons on the active window, dragging windows by their top edge, edge and corner snapping, and app icons on the system bar. Keyboard workflows keep working as before.
-
-<p align="center">
-  <img src="assets/02.png" alt="Mouse-First workflow overview" width="100%">
-</p>
 
 ## Features
 
