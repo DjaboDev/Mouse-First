@@ -112,7 +112,7 @@ git clone https://github.com/DjaboDev/Mouse-First.git
 cd Mouse-First
 scripts/dev-link.sh          # symlink the checkout over the installed plugin
 omarchy restart shell        # services reload only on a shell restart
-node --test tests/           # geometry tests
+node --test tests/*.test.mjs  # geometry tests
 ```
 
 ## Updating & removal
