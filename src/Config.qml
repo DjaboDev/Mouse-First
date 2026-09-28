@@ -38,7 +38,10 @@ FileView {
     JsonAdapter {
         id: adapter
 
-        property string language: String(Quickshell.env("LANG") || "").indexOf("pt") === 0 ? "pt" : "en"
+        property string language: {
+            var lang = String(Quickshell.env("LANG") || "")
+            return lang.indexOf("pt") === 0 ? "pt" : (lang.indexOf("es") === 0 ? "es" : "en")
+        }
         property bool disableTiling: true
         property bool alwaysVisible: true
         property bool dragFullWidth: true

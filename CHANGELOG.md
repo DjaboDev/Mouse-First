@@ -17,6 +17,19 @@ A rewrite of the plugin's internals. Every v0.1 feature is still there, and your
 - The settings file is written atomically and no longer breaks on special characters.
 - Memory used for closed windows is now released.
 
+### Added
+- Snapping, snap preview and immediate un-snapping also work with <kbd>SUPER</kbd> + drag and app title bars. The plugin takes over drags that Hyprland starts on floating windows.
+- Resizing a snapped window by its inner border resizes its snapped neighbour too.
+- Bar icons group the windows of each app, with a window count; clicking cycles through them. A right-click menu lists the windows and offers *New window*, *Pin/Unpin* (shared with omadock) and *Close*.
+- New options:
+  - drag to the top edge to maximize;
+  - center new windows (on or off);
+  - built-in snapping shortcuts (<kbd>SUPER</kbd> + <kbd>CTRL</kbd> + <kbd>SHIFT</kbd> + arrows, off by default);
+  - hide the controls for chosen apps.
+- The controls are skipped on picture-in-picture players and windows too narrow for them.
+- Spanish translation.
+- The icon index is cached on disk and rebuilt only when an icon is missing.
+
 ### Changed
 - The plugin is now a shell service plus a small bar widget. It is event-driven: no polling and no helper scripts. The seven `bin/` scripts (Python/Bash) are gone.
 - Colors come from Omarchy's theme API instead of parsing `colors.toml` every five seconds.
