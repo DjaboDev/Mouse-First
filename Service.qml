@@ -68,6 +68,20 @@ Item {
     readonly property var win: trackerModule.active
     readonly property bool hasWindow: !!root.win && root.win.fullscreen !== 2
         && root.win.workspace !== minimizerModule.workspaceName
+    // Whether the capsule and drag strip are drawn for the active window: not
+    // for windows narrower than the capsule's useful size, picture-in-picture
+    // players, or classes the user excluded.
+    readonly property bool controlsVisible: {
+        if (!root.hasWindow) return false
+        var w = root.win
+        if (w.w < root.cfg.minControlsWidth || w.h < 120) return false
+        if (/picture.in.picture/i.test(w.title)) return false
+        var cls = String(w.cls || "").toLowerCase()
+        var excluded = root.cfg.excludedClasses || []
+        for (var i = 0; i < excluded.length; i++)
+            if (String(excluded[i]).toLowerCase() === cls) return false
+        return true
+    }
     readonly property bool winMaximized: root.hasWindow && statesModule.isMaximized(root.win)
     // Rect the controls follow: the drag's prediction while dragging, so they
     // never trail the pointer, otherwise the compositor's report.
@@ -210,23 +224,46 @@ Item {
         config.set("buttonOrder", order)
     }
 
+    function setExcluded(cls, excluded) {
+        if (!cls) return
+        var list = (root.cfg.excludedClasses || []).filter(c => c !== cls)
+        if (excluded) list.push(cls)
+        config.set("excludedClasses", list)
+        if (excluded) root.settingsOpen = false   // its capsule is about to disappear
+    }
+
     function setButtonVisible(id, visible) {
         var v = Object.assign({}, root.cfg.buttonVisible)
         v[id] = visible
         config.set("buttonVisible", v)
     }
 
-    function applyTilingRule() {
-        if (config.ready) trackerModule.evalLua(Hypr.evalFloatRule(root.cfg.disableTiling))
+    // Settings that live inside Hyprland (window rule, shortcuts) are pushed
+    // on load, on change, and again after a Hyprland config reload.
+    function applyCompositorSettings() {
+        if (!config.ready) return
+        trackerModule.evalLua(Hypr.evalFloatRule(root.cfg.disableTiling, root.cfg.centerNewWindows))
+        trackerModule.evalLua(Hypr.evalShortcuts(root.cfg.enableShortcuts))
+    }
+
+    function runShortcut(action) {
+        if (!root.hasWindow) return
+        var w = root.win
+        if (action === "left" || action === "right") statesModule.snap(w, action, statesModule.restoreGeometryFor(w))
+        else if (action === "up") statesModule.toggleMaximize(w)
+        else if (action === "down") {
+            if (statesModule.isManaged(w)) statesModule.restore(w)
+            else root.minimize(w.address)
+        }
     }
 
     // ── Modules ──────────────────────────────────────────────
 
-    Config { id: config; onReadyChanged: root.applyTilingRule() }
+    Config { id: config; onReadyChanged: root.applyCompositorSettings() }
 
     WindowTracker {
         id: trackerModule
-        onConfigReloaded: root.applyTilingRule()
+        onConfigReloaded: root.applyCompositorSettings()
     }
 
     WindowStates {
@@ -244,6 +281,7 @@ Item {
         tracker: trackerModule
         states: statesModule
         snappingEnabled: !root.cfg.disableSnapping
+        topMaximizes: root.cfg.topEdgeMaximizes
     }
 
     Minimizer { id: minimizerModule; tracker: trackerModule }
@@ -262,7 +300,9 @@ Item {
 
     Connections {
         target: root.cfg
-        function onDisableTilingChanged() { root.applyTilingRule() }
+        function onDisableTilingChanged() { root.applyCompositorSettings() }
+        function onCenterNewWindowsChanged() { root.applyCompositorSettings() }
+        function onEnableShortcutsChanged() { root.applyCompositorSettings() }
     }
 
     // Native moves handed over by the Lua module (see DragController).
@@ -276,6 +316,7 @@ Item {
                 : Object.assign({ address: address, floating: true, fullscreen: 0, monitor: "", workspace: "" }, rect)
             dragModule.takeOver(win, x, y)
         }
+        function onShortcut(action) { root.runShortcut(action) }
         function onCursorMoved(x, y) {
             if (dragModule.handedOver) dragModule.move(x, y)
         }
@@ -370,7 +411,7 @@ Item {
 
     Component.onCompleted: {
         trackerModule.install()
-        root.applyTilingRule()
+        root.applyCompositorSettings()
         layersProc.running = true
     }
 }

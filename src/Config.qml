@@ -45,6 +45,11 @@ FileView {
         property bool showDragHandle: false
         property bool ignoreDock: false
         property bool disableSnapping: false
+        property bool topEdgeMaximizes: false
+        property bool centerNewWindows: true
+        property bool enableShortcuts: false
+        property var excludedClasses: []
+        property int minControlsWidth: 240
         property bool minimizeToBar: true
         property string barSection: "left"
 

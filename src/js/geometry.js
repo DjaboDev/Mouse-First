@@ -212,6 +212,42 @@ function fitInside(win, area) {
     return rect(win.x, area.y, win.w, Math.min(win.h, area.h))
 }
 
+// A snapped window was resized from `before` to `after`. If `other` shares
+// the edge that moved (they sat side by side, `gap` apart), return the rect
+// that keeps `other` against it; otherwise null. Used to resize snapped
+// neighbours together, like a split view.
+function followEdge(before, after, other, gap) {
+    var g = gap || 0
+    var t = MATCH_TOLERANCE * 2
+    var r = { x: other.x, y: other.y, w: other.w, h: other.h }
+    var changed = false
+    var overlapY = other.y < before.y + before.h && other.y + other.h > before.y
+    var overlapX = other.x < before.x + before.w && other.x + other.w > before.x
+
+    if (overlapY && Math.abs(other.x - (before.x + before.w + g)) <= t && after.x + after.w !== before.x + before.w) {
+        var right = other.x + other.w
+        r.x = after.x + after.w + g
+        r.w = right - r.x
+        changed = true
+    }
+    if (overlapY && Math.abs(other.x + other.w + g - before.x) <= t && after.x !== before.x) {
+        r.w = after.x - g - other.x
+        changed = true
+    }
+    if (overlapX && Math.abs(other.y - (before.y + before.h + g)) <= t && after.y + after.h !== before.y + before.h) {
+        var bottom = other.y + other.h
+        r.y = after.y + after.h + g
+        r.h = bottom - r.y
+        changed = true
+    }
+    if (overlapX && Math.abs(other.y + other.h + g - before.y) <= t && after.y !== before.y) {
+        r.h = after.y - g - other.y
+        changed = true
+    }
+    if (!changed || r.w < MIN_W / 2 || r.h < MIN_H / 2) return null
+    return rect(r.x, r.y, r.w, r.h)
+}
+
 // Exported for node tests; ignored by the QML engine.
 if (typeof module !== "undefined") {
     module.exports = {
@@ -220,6 +256,6 @@ if (typeof module !== "undefined") {
         usableArea: usableArea, zoneRect: zoneRect, clampInto: clampInto, isBreaking: isBreaking,
         dragTarget: dragTarget, snapZone: snapZone, defaultRestoreSize: defaultRestoreSize,
         restoreSize: restoreSize, restoreUnderCursor: restoreUnderCursor,
-        centered: centered, fitInside: fitInside
+        centered: centered, fitInside: fitInside, followEdge: followEdge
     }
 }

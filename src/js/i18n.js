@@ -51,7 +51,18 @@ var STRINGS = {
         colorTitle: "COLORS",
         themeFollow: "Follow the Omarchy theme",
         themeFollowSub: "Colors update automatically when the theme changes",
-        closeSettings: "Close settings"
+        closeSettings: "Close settings",
+        centerNewWindows: "Center new windows",
+        centerNewWindowsSub: "Off: apps open where they choose, or where Hyprland puts them",
+        topEdgeMaximizes: "Drag to the top edge to maximize",
+        topEdgeMaximizesSub: "Off: the top edge snaps to the top half of the screen",
+        shortcutsTitle: "KEYBOARD SHORTCUTS",
+        enableShortcuts: "Enable snapping shortcuts",
+        enableShortcutsSub: "Super+Ctrl+Shift with ← → snap to a half, ↑ maximizes or restores, ↓ restores or minimizes",
+        excludedTitle: "HIDE CONTROLS",
+        excludedSub: "Apps where the control bar and drag strip are not shown. Small windows and picture-in-picture are always skipped.",
+        hideForApp: "Hide for %1",
+        noExcluded: "No apps hidden"
     },
     pt: {
         minimize: "Minimizar",
@@ -103,7 +114,18 @@ var STRINGS = {
         colorTitle: "CORES",
         themeFollow: "Seguir o tema do Omarchy",
         themeFollowSub: "As cores mudam automaticamente ao trocar de tema",
-        closeSettings: "Fechar configurações"
+        closeSettings: "Fechar configurações",
+        centerNewWindows: "Centralizar janelas novas",
+        centerNewWindowsSub: "Desligado: os apps abrem onde escolherem, ou onde o Hyprland colocar",
+        topEdgeMaximizes: "Arrastar até o topo maximiza",
+        topEdgeMaximizesSub: "Desligado: o topo faz snap para a metade de cima da tela",
+        shortcutsTitle: "ATALHOS DE TECLADO",
+        enableShortcuts: "Ativar atalhos de snap",
+        enableShortcutsSub: "Super+Ctrl+Shift com ← → faz snap numa metade, ↑ maximiza ou restaura, ↓ restaura ou minimiza",
+        excludedTitle: "OCULTAR CONTROLES",
+        excludedSub: "Apps onde a barra de controles e a zona de arrasto não aparecem. Janelas pequenas e picture-in-picture são sempre ignoradas.",
+        hideForApp: "Ocultar em %1",
+        noExcluded: "Nenhum app oculto"
     }
 }
 

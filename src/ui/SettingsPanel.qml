@@ -96,6 +96,15 @@ Rectangle {
                 checked: panel.cfg.disableTiling
                 onToggled: panel.set("disableTiling", !panel.cfg.disableTiling)
             }
+            SettingsToggle {
+                x: 16
+                width: parent.width - 16
+                svc: panel.svc
+                enabled: panel.cfg.disableTiling
+                label: panel.t("centerNewWindows"); sublabel: panel.t("centerNewWindowsSub")
+                checked: panel.cfg.centerNewWindows
+                onToggled: panel.set("centerNewWindows", !panel.cfg.centerNewWindows)
+            }
 
             Section { text: panel.t("minimizedSectionTitle") }
             SettingsToggle {
@@ -169,6 +178,48 @@ Rectangle {
                 label: panel.t("disableSnapping"); sublabel: panel.t("disableSnappingSub")
                 checked: panel.cfg.disableSnapping
                 onToggled: panel.set("disableSnapping", !panel.cfg.disableSnapping)
+            }
+            SettingsToggle {
+                svc: panel.svc
+                enabled: !panel.cfg.disableSnapping
+                label: panel.t("topEdgeMaximizes"); sublabel: panel.t("topEdgeMaximizesSub")
+                checked: panel.cfg.topEdgeMaximizes
+                onToggled: panel.set("topEdgeMaximizes", !panel.cfg.topEdgeMaximizes)
+            }
+
+            Section { text: panel.t("shortcutsTitle") }
+            SettingsToggle {
+                svc: panel.svc
+                label: panel.t("enableShortcuts"); sublabel: panel.t("enableShortcutsSub")
+                checked: panel.cfg.enableShortcuts
+                onToggled: panel.set("enableShortcuts", !panel.cfg.enableShortcuts)
+            }
+
+            Section { text: panel.t("excludedTitle") }
+            Caption { text: panel.t("excludedSub") }
+            Flow {
+                width: parent.width
+                spacing: 4
+                Repeater {
+                    model: panel.cfg.excludedClasses
+                    Chip {
+                        required property var modelData
+                        label: modelData + "  ✕"
+                        selected: true
+                        onClicked: panel.svc.setExcluded(modelData, false)
+                    }
+                }
+                Chip {
+                    readonly property string cls: panel.svc.win ? String(panel.svc.win.cls || "") : ""
+                    visible: cls !== "" && panel.cfg.excludedClasses.indexOf(cls) < 0
+                    label: panel.t("hideForApp").replace("%1", cls)
+                    onClicked: panel.svc.setExcluded(cls, true)
+                }
+                Caption {
+                    width: implicitWidth
+                    visible: panel.cfg.excludedClasses.length === 0 && !(panel.svc.win && panel.svc.win.cls)
+                    text: panel.t("noExcluded")
+                }
             }
 
             Section { text: panel.t("menuDragging") }

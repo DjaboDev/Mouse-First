@@ -124,3 +124,31 @@ test("clampInto keeps the size and pulls the rect inside", () => {
   const r = G.clampInto({ x: 2400, y: 1300, w: 800, h: 600 }, area)
   assert.deepEqual(plain(r), { x: area.x + area.w - 800, y: area.y + area.h - 600, w: 800, h: 600 })
 })
+
+test("followEdge keeps a side-by-side neighbour against the moved edge", () => {
+  const g = 6
+  const left = G.zoneRect("left", area, g)
+  const right = G.zoneRect("right", area, g)
+  const wider = { ...left, w: left.w + 200 }
+  const r = G.followEdge(left, wider, right, g)
+  assert.equal(r.x, wider.x + wider.w + g)
+  assert.equal(r.x + r.w, right.x + right.w)
+  // Resizing the right window from its left edge shrinks the left one.
+  const narrower = { ...right, x: right.x + 100, w: right.w - 100 }
+  const l = G.followEdge(right, narrower, left, g)
+  assert.equal(l.x, left.x)
+  assert.equal(l.x + l.w + g, narrower.x)
+})
+
+test("followEdge handles stacked quarters and ignores unrelated windows", () => {
+  const g = 6
+  const tl = G.zoneRect("top-left", area, g)
+  const bl = G.zoneRect("bottom-left", area, g)
+  const br = G.zoneRect("bottom-right", area, g)
+  const taller = { ...tl, h: tl.h + 100 }
+  const b = G.followEdge(tl, taller, bl, g)
+  assert.equal(b.y, taller.y + taller.h + g)
+  assert.equal(b.y + b.h, bl.y + bl.h)
+  assert.equal(G.followEdge(tl, taller, br, g), null)   // only touches at a corner
+  assert.equal(G.followEdge(tl, tl, bl, g), null)       // nothing moved
+})

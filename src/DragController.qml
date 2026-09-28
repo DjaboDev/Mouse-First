@@ -21,6 +21,7 @@ Item {
     required property var tracker
     required property var states
     property bool snappingEnabled: true
+    property bool topMaximizes: false     // top edge maximizes instead of the top half
 
     readonly property bool pressed: _win !== null
     property bool active: false
@@ -71,6 +72,7 @@ Item {
 
         root.rect = G.dragTarget(raw, area, monitor, cursor)
         var z = root.snappingEnabled ? G.snapZone(raw, area, monitor, cursor) : ""
+        if (z === "top" && root.topMaximizes) z = "maximize"
         root.zoneRect = z ? G.zoneRect(z, area, root.states.gap) : null
         root.zone = z
         root._dirty = true

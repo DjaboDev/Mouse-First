@@ -18,6 +18,12 @@ MOUSE_FIRST = MOUSE_FIRST or {}
 local M = MOUSE_FIRST
 M.generation = MOUSE_FIRST_GENERATION
 
+-- Earlier builds kept a single rule here; retire it on reload.
+if M.float_rule then
+  M.float_rule:set_enabled(false)
+  M.float_rule = nil
+end
+
 local SEP = "\31"
 local MINIMIZED = "special:minimized"
 
@@ -165,17 +171,41 @@ function M.tick()
 end
 
 -- "Disable tiling" is a real window rule, so windows open floating instead of
--- being floated after the fact. Rules are named, so toggling reuses one.
-function M.set_float_rule(enabled)
-  if not M.float_rule then
-    M.float_rule = hl.window_rule({
-      name = "mouse-first-float",
-      match = { class = ".*" },
-      float = true,
-      center = true,
-    })
+-- being floated after the fact. Rules are named and created once; toggling
+-- only enables the right one (with or without centering new windows).
+function M.set_float_rule(enabled, center)
+  if not M.float_rules then
+    M.float_rules = {
+      center = hl.window_rule({ name = "mouse-first-float-center", match = { class = ".*" }, float = true, center = true }),
+      plain = hl.window_rule({ name = "mouse-first-float-plain", match = { class = ".*" }, float = true }),
+    }
   end
-  M.float_rule:set_enabled(enabled and true or false)
+  M.float_rules.center:set_enabled(enabled and center and true or false)
+  M.float_rules.plain:set_enabled(enabled and not center and true or false)
+end
+
+-- Optional keyboard shortcuts. They only report to the shell, which knows
+-- the snap state and does the work.
+local SHORTCUTS = {
+  { keys = "SUPER + CTRL + SHIFT + LEFT", action = "left", desc = "Snap window left" },
+  { keys = "SUPER + CTRL + SHIFT + RIGHT", action = "right", desc = "Snap window right" },
+  { keys = "SUPER + CTRL + SHIFT + UP", action = "up", desc = "Maximize or restore window" },
+  { keys = "SUPER + CTRL + SHIFT + DOWN", action = "down", desc = "Restore or minimize window" },
+}
+
+local function remove_shortcuts()
+  for _, b in ipairs(M.shortcut_binds or {}) do pcall(function() b:remove() end) end
+  M.shortcut_binds = {}
+end
+
+function M.set_shortcuts(enabled)
+  remove_shortcuts()
+  if not enabled then return end
+  for _, s in ipairs(SHORTCUTS) do
+    local action = s.action
+    local ok, b = pcall(hl.bind, s.keys, function() emit("shortcut", action) end, { description = "Mouse-First: " .. s.desc })
+    if ok and b then table.insert(M.shortcut_binds, b) end
+  end
 end
 
 -- Minimize parks the window on special:minimized (shared with omadock) and
@@ -223,8 +253,12 @@ end
 function M.stop(generation)
   if generation and generation ~= M.generation then return end
   if M.timer then M.timer:set_enabled(false) end
-  if M.float_rule then M.float_rule:set_enabled(false) end
+  if M.float_rules then
+    M.float_rules.center:set_enabled(false)
+    M.float_rules.plain:set_enabled(false)
+  end
   remove_binds()
+  remove_shortcuts()
 end
 
 M.migrate_legacy_minimized()

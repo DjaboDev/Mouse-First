@@ -21,7 +21,7 @@ PanelWindow {
     // monitor. During a drag it keeps them (and the pointer grab) until the
     // button is released, even if the window crosses to another screen.
     readonly property bool hosting: {
-        if (!svc.hasWindow || !screen) return false
+        if (!svc.controlsVisible || !screen) return false
         if (svc.dragScreen !== "") return svc.dragScreen === screen.name
         return svc.winMonitor === screen.name
     }

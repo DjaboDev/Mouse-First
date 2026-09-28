@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Hyprland
 import "js/geometry.js" as G
 import "js/hypr.js" as Hypr
 
@@ -22,14 +23,17 @@ Item {
     property string barPosition: "top"
     property int barThickness: 26
 
-    // address -> { mode: "snapped"|"maximized", zone, target, restore, since, confirmed }
+    // address -> { mode: "snapped"|"maximized", zone, target, restore, monitor,
+    //              workspace, since, confirmed }
     property var entries: ({})
     // address -> last geometry seen while the window was free and floating
     property var lastFree: ({})
     // address -> true once oversized-window protection has run
     property var fitted: ({})
-    // Native (SUPER + drag) move of a snapped window waiting for the drop.
-    property var pendingDrop: null
+
+    // Border resize of a snapped window in progress: its rect when the
+    // resize started and the snapped neighbours that follow its edges.
+    property var resizeSession: null
 
     readonly property int settleMs: 700
 
@@ -96,7 +100,6 @@ Item {
         root.clear(address)
         delete root.lastFree[address]
         delete root.fitted[address]
-        if (root.pendingDrop && root.pendingDrop.address === address) root.pendingDrop = null
     }
 
     function apply(address, r) {
@@ -107,6 +110,7 @@ Item {
         if (!win.floating) root.tracker.dispatch(Hypr.setFloating(win.address, true))
         root._set(win.address, {
             mode: mode, zone: zone, target: target, restore: restore,
+            monitor: win.monitor, workspace: win.workspace,
             since: Date.now(), confirmed: false
         })
         root.apply(win.address, target)
@@ -163,19 +167,81 @@ Item {
             if (G.rectsMatch(win, e.target)) {
                 if (!e.confirmed) e.confirmed = true
             } else if (root.tracker.buttonDown) {
-                // A drag may be starting; the drag controller takes it over
-                // and restores the window itself. Decide once it is released.
+                // A drag is handed to the drag controller, which restores the
+                // window itself. A border resize drags the neighbours along.
+                if (e.mode === "snapped" && e.confirmed && !G.sizesMatch(win, e.target))
+                    root._resizeNeighbours(win, e)
+            } else if (root.resizeSession && root.resizeSession.address === win.address) {
+                root._finishResize(win)
             } else if (e.confirmed || Date.now() - e.since > root.settleMs) {
-                if (G.sizesMatch(win, e.target) && win.fullscreen === 0) root._beginNativeDrop(win, e)
-                else root.clear(win.address)   // resized by the user: now free
+                // Moved or resized by something else (a border resize, a
+                // keybind): the window is free again.
+                root.clear(win.address)
             }
         } else if (win.floating && win.fullscreen === 0) {
             root.lastFree[win.address] = G.rect(win.x, win.y, win.w, win.h)
             root._fitOnce(win)
         }
+    }
 
-        if (root.pendingDrop && root.pendingDrop.address === win.address && !root.tracker.buttonDown)
-            dropTimer.restart()
+    // ── Resizing snapped neighbours together ─────────────────
+
+    function _workspaceOf(address) {
+        var ts = Hyprland.toplevels.values
+        for (var i = 0; i < ts.length; i++)
+            if (Hypr.normalizeAddress(ts[i].address) === address)
+                return ts[i].workspace ? String(ts[i].workspace.name || "") : ""
+        return ""
+    }
+
+    function _resizeNeighbours(win, e) {
+        var session = root.resizeSession
+        if (!session || session.address !== win.address) {
+            var neighbours = []
+            for (var a in root.entries) {
+                var n = root.entries[a]
+                if (a === win.address || n.mode !== "snapped" || n.monitor !== e.monitor) continue
+                if (n.workspace !== e.workspace || root._workspaceOf(a) !== e.workspace) continue
+                neighbours.push({ address: a, start: n.target })
+            }
+            session = { address: win.address, start: e.target, neighbours: neighbours, latest: {} }
+            root.resizeSession = session
+        }
+        var now = G.rect(win.x, win.y, win.w, win.h)
+        for (var i = 0; i < session.neighbours.length; i++) {
+            var nb = session.neighbours[i]
+            var r = G.followEdge(session.start, now, nb.start, root.gap)
+            if (r) session.latest[nb.address] = r
+        }
+        if (!neighbourTimer.running) neighbourTimer.start()
+    }
+
+    // The resize ended: the window stays snapped at its new size, and so do
+    // the neighbours that followed it.
+    function _finishResize(win) {
+        neighbourTimer.stop()
+        root._flushNeighbours()
+        var session = root.resizeSession
+        root.resizeSession = null
+        var next = Object.assign({}, root.entries)
+        var own = next[win.address]
+        if (own) next[win.address] = Object.assign({}, own, { target: G.rect(win.x, win.y, win.w, win.h), since: Date.now() })
+        for (var a in session.latest)
+            if (next[a]) next[a] = Object.assign({}, next[a], { target: session.latest[a], since: Date.now(), confirmed: true })
+        root.entries = next
+    }
+
+    function _flushNeighbours() {
+        var session = root.resizeSession
+        if (!session) return
+        for (var a in session.latest) root.apply(a, session.latest[a])
+    }
+
+    // Neighbour geometry is sent at most ~30 times a second.
+    Timer {
+        id: neighbourTimer
+        interval: 33
+        onTriggered: root._flushNeighbours()
     }
 
     // Windows that open larger than the usable area or under the bar are
@@ -188,51 +254,11 @@ Item {
         if (r) root.apply(win.address, r)
     }
 
-    // A snapped or maximized window is being moved by Hyprland itself
-    // (SUPER + drag). Resizing it mid-drag would detach it from the cursor,
-    // because Hyprland keeps the grab offset it started with; wait for the
-    // drop, then restore the size around the cursor.
-    function _beginNativeDrop(win, e) {
-        root.clear(win.address)
-        root.pendingDrop = { address: win.address, restore: e.restore }
-        if (!root.tracker.buttonDown) dropTimer.restart()
-    }
-
-    function _finishNativeDrop(cursor) {
-        var p = root.pendingDrop
-        root.pendingDrop = null
-        var win = root.tracker.active
-        if (!p || !win || win.address !== p.address) return
-        var monitor = cursor ? root.monitorAt(cursor.x, cursor.y) : root.monitorOf(win)
-        var area = root.areaFor(monitor)
-        var size = G.restoreSize(p.restore, area)
-        var r
-        if (cursor && G.contains(win, cursor.x, cursor.y)) {
-            r = G.restoreUnderCursor(size, cursor, (cursor.x - win.x) / win.w, cursor.y - win.y, area)
-        } else {
-            var cx = win.x + win.w / 2
-            r = G.clampInto(G.rect(cx - size.w / 2, win.y, size.w, size.h), area)
-        }
-        root.apply(win.address, r)
-    }
-
-    // Fallback when the compositor cannot report the button: the move is
-    // over once the window stops moving for a moment.
-    Timer {
-        id: dropTimer
-        interval: 250
-        onTriggered: if (!root.tracker.buttonDown) root._finishNativeDrop(null)
-    }
-
     Connections {
         target: root.tracker
         function onWindowUpdated(win) { root.observe(win) }
         function onWindowClosed(address) { root.forget(address) }
-        function onButtonReleased(x, y) {
-            if (root.pendingDrop) {
-                dropTimer.stop()
-                root._finishNativeDrop({ x: x, y: y })
-            }
-        }
+        // The last geometry report may come before the release; look again.
+        function onButtonReleased(x, y) { Qt.callLater(() => root.observe(root.tracker.active)) }
     }
 }

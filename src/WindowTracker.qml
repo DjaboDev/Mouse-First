@@ -33,6 +33,7 @@ Item {
     // handed the drag over; cursor reports follow until the button is released.
     signal nativeDragStarted(string address, real x, real y, var rect)
     signal cursorMoved(real x, real y)
+    signal shortcut(string action)
     signal configReloaded()
 
     readonly property string moduleSource: luaFile.text()
@@ -145,6 +146,8 @@ Item {
         } else if (kind === "cursor") {
             var c = payload.split(",")
             root.cursorMoved(Number(c[0]), Number(c[1]))
+        } else if (kind === "shortcut") {
+            root.shortcut(payload)
         } else if (kind === "native") {
             var n = payload.split(",")
             if (n.length < 7) return
