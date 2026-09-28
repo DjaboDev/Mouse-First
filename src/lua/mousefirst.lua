@@ -79,34 +79,43 @@ local function cursor()
   return round(c.x), round(c.y)
 end
 
+-- Hyprland 0.56 crashes when any method is called on an HL.Keybind whose
+-- bind no longer exists (it null-checks an optional instead of the pointer),
+-- and `remove()` drops every bind with the same key and modifiers, so the
+-- second of our two mouse:272 handles would be dead. The module therefore
+-- never calls methods on keybind handles: the button binds are registered
+-- once per Lua state (a config reload starts a fresh state) and are turned
+-- off through `M.enabled`; shortcuts are removed by key name.
 local function on_press()
-  M.button_down = true
-  M.down_rect = nil
-  M.taken = false
+  if not MOUSE_FIRST.enabled then return end
+  MOUSE_FIRST.button_down = true
+  MOUSE_FIRST.down_rect = nil
+  MOUSE_FIRST.taken = false
   local x, y = cursor()
   emit("button", "1," .. x .. "," .. y)
 end
 
 local function on_release()
-  M.button_down = false
-  M.taken = false
+  if not MOUSE_FIRST.enabled then return end
+  MOUSE_FIRST.button_down = false
+  MOUSE_FIRST.taken = false
   local x, y = cursor()
   emit("button", "0," .. x .. "," .. y)
 end
 
-local function remove_binds()
-  for _, b in ipairs(M.binds or {}) do pcall(function() b:remove() end) end
-  M.binds = {}
-end
-
 local function install_binds()
-  remove_binds()
+  -- Handles from builds before this fix: the binds still exist and their
+  -- callbacks are compatible; forget the handles without touching them.
+  if M.binds then
+    M.binds = nil
+    M.binds_installed = true
+  end
+  if M.binds_installed then return end
+  M.binds_installed = true
   local opts = { non_consuming = true, transparent = true, ignore_mods = true, description = "Mouse-First: track left button" }
-  local ok1, press = pcall(hl.bind, "mouse:272", on_press, opts)
-  local ok2, release = pcall(hl.bind, "mouse:272", on_release,
+  pcall(hl.bind, "mouse:272", function() on_press() end, opts)
+  pcall(hl.bind, "mouse:272", function() on_release() end,
     { non_consuming = true, transparent = true, ignore_mods = true, release = true, description = "Mouse-First: track left button" })
-  if ok1 and press then table.insert(M.binds, press) end
-  if ok2 and release then table.insert(M.binds, release) end
 end
 
 -- Native moves (SUPER + drag, or an app's own title bar). Hyprland places the
@@ -194,8 +203,10 @@ local SHORTCUTS = {
 }
 
 local function remove_shortcuts()
-  for _, b in ipairs(M.shortcut_binds or {}) do pcall(function() b:remove() end) end
-  M.shortcut_binds = {}
+  if M.shortcut_binds then M.shortcut_binds = nil end   -- legacy handles: never touched
+  if not M.shortcuts_installed then return end
+  for _, s in ipairs(SHORTCUTS) do pcall(hl.unbind, s.keys) end
+  M.shortcuts_installed = false
 end
 
 function M.set_shortcuts(enabled)
@@ -203,9 +214,9 @@ function M.set_shortcuts(enabled)
   if not enabled then return end
   for _, s in ipairs(SHORTCUTS) do
     local action = s.action
-    local ok, b = pcall(hl.bind, s.keys, function() emit("shortcut", action) end, { description = "Mouse-First: " .. s.desc })
-    if ok and b then table.insert(M.shortcut_binds, b) end
+    pcall(hl.bind, s.keys, function() emit("shortcut", action) end, { description = "Mouse-First: " .. s.desc })
   end
+  M.shortcuts_installed = true
 end
 
 -- Minimize parks the window on special:minimized (shared with omadock) and
@@ -253,14 +264,17 @@ end
 function M.stop(generation)
   if generation and generation ~= M.generation then return end
   if M.timer then M.timer:set_enabled(false) end
+  M.enabled = false
+  M.button_down = false
+  M.taken = false
   if M.float_rules then
     M.float_rules.center:set_enabled(false)
     M.float_rules.plain:set_enabled(false)
   end
-  remove_binds()
   remove_shortcuts()
 end
 
+M.enabled = true
 M.migrate_legacy_minimized()
 install_binds()
 M.resend()
