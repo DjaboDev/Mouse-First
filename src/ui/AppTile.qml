@@ -1,16 +1,21 @@
 import QtQuick
 
-// One app on the bar. Left click: focus / minimize / restore / launch.
-// Middle or right click: close the window.
+// One app on the bar (all of its windows). Left click: launch, toggle, or
+// cycle through the windows. Middle click: close the focused window.
+// Right click: the app menu.
 Rectangle {
     id: tile
 
     required property var row
     required property var svc
     property var bar: null
+    property var menu: null
+
+    readonly property int windowCount: row.windows ? row.windows.length : 0
 
     readonly property string state_: row.state
-    readonly property string tooltip: row.title ? row.name + " — " + row.title : (row.name || svc.tr("untitled"))
+    readonly property string tooltip: windowCount > 1 ? row.name + " (" + windowCount + ")"
+        : (row.title ? row.name + " — " + row.title : (row.name || svc.tr("untitled")))
 
     width: 26
     height: 26
@@ -65,6 +70,28 @@ Rectangle {
         opacity: tile.state_ === "active" ? 1 : (tile.state_ === "running" ? 0.85 : 0.65)
     }
 
+    // Window count when the app has more than one.
+    Rectangle {
+        visible: tile.windowCount > 1
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.rightMargin: -3
+        anchors.topMargin: 0
+        width: Math.max(12, countText.implicitWidth + 4)
+        height: 12
+        radius: 6
+        color: tile.svc.accent
+        Text {
+            id: countText
+            anchors.centerIn: parent
+            text: tile.windowCount > 9 ? "9+" : String(tile.windowCount)
+            color: tile.svc.bg
+            font.family: tile.svc.fontFamily
+            font.pixelSize: 8
+            font.bold: true
+        }
+    }
+
     MouseArea {
         id: area
         anchors.fill: parent
@@ -77,6 +104,7 @@ Rectangle {
         onClicked: mouse => {
             if (tile.bar && tile.bar.hideTooltip) tile.bar.hideTooltip(tile)
             if (mouse.button === Qt.LeftButton) tile.svc.activateRow(tile.row)
+            else if (mouse.button === Qt.RightButton) { if (tile.menu) tile.menu.openFor(tile.row, tile) }
             else if (tile.row.address) tile.svc.close(tile.row.address)
         }
     }

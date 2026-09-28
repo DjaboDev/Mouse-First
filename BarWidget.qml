@@ -36,6 +36,12 @@ Item {
     }
     onBarChanged: bindService()
 
+    Loader {
+        id: menuLoader
+        active: !!root.service
+        sourceComponent: AppMenu { svc: root.service }
+    }
+
     Grid {
         id: row
         anchors.centerIn: parent
@@ -50,6 +56,7 @@ Item {
                 row: modelData
                 svc: root.service
                 bar: root.bar
+                menu: menuLoader.item
             }
         }
     }

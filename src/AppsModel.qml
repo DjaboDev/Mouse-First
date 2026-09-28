@@ -5,10 +5,12 @@ import Quickshell.Hyprland
 import "js/hypr.js" as Hypr
 
 // Apps shown on the system bar: pinned apps from omadock's dock.json first,
-// then every other open window. Built from Quickshell's live toplevel list
-// and desktop entries; rebuilt only when Hyprland reports a change.
+// then every other running app. Windows of the same app share one tile.
+// Built from Quickshell's live toplevel list and desktop entries, and
+// rebuilt only when Hyprland reports a change.
 //
-// rows: [{ key, appId, name, icon, title, state, address, pinned }]
+// rows: [{ key, appId, pinId, name, icon, state, title, address, pinned,
+//          windows: [{ address, title, state, focus }] }]
 //   state: "active" | "running" | "minimized" | "closed"
 Item {
     id: root
@@ -46,16 +48,16 @@ Item {
         return themed || ""
     }
 
-    function _matchesPin(pin, appId, entry) {
-        var p = pin.toLowerCase()
-        if (appId.toLowerCase() === p) return true
-        if (entry && String(entry.id).toLowerCase() === p) return true
-        return false
+    function _groupKey(appId, entry) {
+        return entry && entry.id ? String(entry.id).toLowerCase() : String(appId || "").toLowerCase()
     }
+
+    readonly property var _rank: ({ active: 0, running: 1, minimized: 2, closed: 3 })
 
     function rebuild() {
         var toplevels = Hyprland.toplevels.values
-        var wins = []
+        var groups = {}
+        var order = []
         var minimized = []
         for (var i = 0; i < toplevels.length; i++) {
             var t = toplevels[i]
@@ -66,50 +68,78 @@ Item {
             var isMin = ws === root.minimizedWorkspace
             if (isMin) minimized.push(address)
             var entry = root.entryFor(appId)
-            wins.push({
+            var key = root._groupKey(appId, entry)
+            if (!groups[key]) {
+                groups[key] = { appId: appId, entry: entry, windows: [] }
+                order.push(key)
+            }
+            var ipc = t.lastIpcObject || {}
+            groups[key].windows.push({
                 address: address,
-                appId: appId,
-                entry: entry,
                 title: String(t.title || ""),
-                state: isMin ? "minimized" : (t.activated ? "active" : "running")
+                state: isMin ? "minimized" : (t.activated ? "active" : "running"),
+                focus: ipc.focusHistoryID !== undefined ? Number(ipc.focusHistoryID) : 999
             })
         }
 
         var out = []
         var used = {}
-        var rank = { active: 0, running: 1, minimized: 2 }
         for (var p = 0; p < root.pinned.length; p++) {
             var pin = String(root.pinned[p] || "")
             if (pin === "") continue
             var pinEntry = root.entryFor(pin)
-            var best = null
-            for (var w = 0; w < wins.length; w++) {
-                if (used[wins[w].address] || !root._matchesPin(pin, wins[w].appId, wins[w].entry)) continue
-                used[wins[w].address] = true
-                if (!best || rank[wins[w].state] < rank[best.state]) best = wins[w]
-            }
-            out.push(root._row(best, pinEntry, pin, true))
+            var pinKey = root._groupKey(pin, pinEntry)
+            var g = groups[pinKey] || groups[pin.toLowerCase()]
+            if (g) used[root._groupKey(g.appId, g.entry)] = true
+            out.push(root._row(g, pinEntry || (g ? g.entry : null), pin, pin))
         }
-        for (var k = 0; k < wins.length; k++) {
-            if (used[wins[k].address]) continue
-            out.push(root._row(wins[k], wins[k].entry, wins[k].appId, false))
+        for (var k = 0; k < order.length; k++) {
+            if (used[order[k]]) continue
+            var group = groups[order[k]]
+            out.push(root._row(group, group.entry, group.appId, ""))
         }
         root.rows = out
         root.minimizedChanged(minimized)
     }
 
-    function _row(win, entry, appId, pinned) {
+    function _row(group, entry, appId, pinId) {
+        var windows = group ? group.windows : []
+        var best = null
+        for (var i = 0; i < windows.length; i++)
+            if (!best || root._rank[windows[i].state] < root._rank[best.state]
+                    || (windows[i].state === best.state && windows[i].focus < best.focus))
+                best = windows[i]
         var name = entry && entry.name ? String(entry.name) : (appId || "App")
+        var icon = root.iconSource(entry ? entry.icon : appId) || root.iconSource(appId)
+        if (!icon && !root._rescanned) root._requestRescan()
         return {
-            key: win ? win.address : "pin:" + appId,
+            key: pinId !== "" ? "pin:" + pinId : "app:" + root._groupKey(appId, entry),
             appId: entry && entry.id ? String(entry.id) : appId,
+            pinId: pinId,
             name: name,
-            icon: root.iconSource(entry ? entry.icon : appId) || root.iconSource(appId),
-            title: win ? win.title : "",
-            state: win ? win.state : "closed",
-            address: win ? win.address : "",
-            pinned: pinned
+            icon: icon,
+            title: best ? best.title : "",
+            state: best ? best.state : "closed",
+            address: best ? best.address : "",
+            pinned: pinId !== "",
+            windows: windows
         }
+    }
+
+    // ── Pinning (shared with omadock through dock.json) ──────
+
+    function setPinned(appId, pinned) {
+        if (!appId) return
+        var data = {}
+        try { data = JSON.parse(dockFile.text() || "{}") } catch (e) { data = {} }
+        var list = Array.isArray(data.pinned) ? data.pinned.slice() : []
+        var lower = String(appId).toLowerCase()
+        list = list.filter(p => String(p).toLowerCase() !== lower)
+        if (pinned) list.push(appId)
+        data.pinned = list
+        root.pinned = list
+        dockFile.setText(JSON.stringify(data, null, 2) + "\n")
+        root.scheduleRebuild()
     }
 
     function launch(appId) {
@@ -157,8 +187,9 @@ Item {
     Connections {
         target: DesktopEntries.applications
         function onValuesChanged() {
+            // A newly installed app may bring an icon the index lacks.
+            root._rescanned = false
             root.scheduleRebuild()
-            iconScanDebounce.restart()
         }
     }
 
@@ -182,15 +213,42 @@ Item {
 
     // Absolute-path icon index, the same approach as Omarchy's AppLibrary:
     // Qt's themed lookup returns nothing when the configured icon theme is
-    // not installed, which would leave every tile blank.
+    // not installed, which would leave every tile blank. The index is cached
+    // on disk and only rebuilt (at low priority) when an icon is missing.
+    readonly property string cacheDir: (Quickshell.env("XDG_CACHE_HOME") || (Quickshell.env("HOME") + "/.cache")) + "/mouse-first"
+    property bool _cacheReady: false
+    property bool _rescanned: false
+
+    function _requestRescan() {
+        if (!root._cacheReady || root._rescanned) return
+        root._rescanned = true
+        iconScanDebounce.restart()
+    }
+
+    FileView {
+        id: iconCache
+        path: root.cacheDir + "/icons.json"
+        atomicWrites: true
+        printErrors: false
+        onLoaded: {
+            try { root.iconIndex = JSON.parse(text()) || {} } catch (e) { root.iconIndex = {} }
+            root._cacheReady = true
+            root.scheduleRebuild()
+        }
+        onLoadFailed: {
+            root._cacheReady = true
+            root._requestRescan()
+        }
+    }
+
     Timer {
         id: iconScanDebounce
-        interval: 1500
+        interval: 2000
         onTriggered: if (!iconScan.running) iconScan.running = true
     }
     Process {
         id: iconScan
-        command: ["bash", "-c", [
+        command: ["nice", "-n", "19", "bash", "-c", [
             'dirs="$HOME/.icons $HOME/.local/share/icons";',
             'IFS=":"; for d in ${XDG_DATA_DIRS:-/usr/local/share:/usr/share}; do dirs="$dirs $d/icons"; done; unset IFS;',
             'for ext in svg png; do',
@@ -213,12 +271,13 @@ Item {
         onStarted: root._pendingIcons = ({})
         onExited: {
             root.iconIndex = root._pendingIcons
+            iconCache.setText(JSON.stringify(root.iconIndex))
             root.scheduleRebuild()
         }
     }
 
     Component.onCompleted: {
-        iconScan.running = true
+        Quickshell.execDetached(["mkdir", "-p", root.cacheDir])
         Hyprland.refreshToplevels()
         root.scheduleRebuild()
     }

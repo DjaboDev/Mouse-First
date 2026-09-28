@@ -208,13 +208,38 @@ Item {
 
     function launch(appId) { appsModule.launch(appId) }
 
-    // Bar tile click: the familiar taskbar cycle.
+    // Bar tile click, like a taskbar: launch when nothing is open; with one
+    // window, toggle it (minimize when focused, bring back otherwise); with
+    // several, cycle through them, starting from the most recently used.
     function activateRow(row) {
-        if (row.state === "active") root.minimize(row.address)
-        else if (row.state === "running") root.focus(row.address)
-        else if (row.state === "minimized") root.restore(row.address)
-        else if (row.state === "closed") root.launch(row.appId)
+        var wins = row.windows || []
+        if (wins.length === 0) { root.launch(row.appId); return }
+        var active = -1
+        for (var i = 0; i < wins.length; i++) if (wins[i].state === "active") active = i
+        var target
+        if (active >= 0) {
+            if (wins.length === 1) { root.minimize(wins[0].address); return }
+            target = wins[(active + 1) % wins.length]
+        } else {
+            target = wins.slice().sort((a, b) => {
+                var ra = a.state === "minimized" ? 1 : 0, rb = b.state === "minimized" ? 1 : 0
+                return ra !== rb ? ra - rb : a.focus - b.focus
+            })[0]
+        }
+        root.activateWindow(target)
     }
+
+    function activateWindow(w) {
+        if (w.state === "minimized") root.restore(w.address)
+        else root.focus(w.address)
+    }
+
+    function closeRow(row) {
+        var wins = row.windows || []
+        for (var i = 0; i < wins.length; i++) root.close(wins[i].address)
+    }
+
+    function setPinned(appId, pinned) { appsModule.setPinned(appId, pinned) }
 
     function moveButton(index, delta) {
         var order = root.cfg.buttonOrder.slice()
