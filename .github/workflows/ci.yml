@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Geometry tests
+        run: node --test tests/*.test.mjs
+      - name: Validate manifest
+        run: node -e 'const m=require("./manifest.json"); for (const k of ["schemaVersion","id","name","version","kinds","entryPoints"]) if (!(k in m)) throw new Error("manifest missing " + k); for (const f of Object.values(m.entryPoints)) require("fs").accessSync(f)'
+      - name: Lua syntax
+        run: |
+          sudo apt-get install -y --no-install-recommends lua5.4 >/dev/null
+          luac5.4 -p src/lua/mousefirst.lua
+      - name: QML syntax
+        run: |
+          sudo apt-get install -y --no-install-recommends qt6-declarative-dev-tools >/dev/null
+          out=$(for f in $(git ls-files '*.qml'); do /usr/lib/qt6/bin/qmllint "$f" 2>&1; done | grep '\[syntax\]' || true)
+          if [ -n "$out" ]; then echo "$out"; exit 1; fi
+      - name: Shell scripts
+        run: shellcheck scripts/*.sh
