@@ -135,6 +135,8 @@ Item {
         } else if (root.rect) {
             root.tracker.dispatch(Hypr.move(root.address, root.rect.x, root.rect.y))
         }
+        // A window dropped on another monitor still belongs to the old one.
+        if (root.rect) root.tracker.evalLua(Hypr.evalAdopt(root.address, root.rect))
         restoreAnimTimer.pendingAddress = root.address
         restoreAnimTimer.restart()
     }

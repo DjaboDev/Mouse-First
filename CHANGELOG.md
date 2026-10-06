@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- A window dragged to another monitor now moves to that monitor's workspace. Before, Hyprland still filed it under the old monitor, so the controls were drawn off-screen and disappeared.
+
 ## 0.2.0
 
 A rewrite of the plugin's internals. Every v0.1 feature is still there, and your existing `~/.config/omarchy/mouse-first.json` keeps working.

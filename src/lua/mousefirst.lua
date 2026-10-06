@@ -251,6 +251,32 @@ function M.restore(address, workspace)
   hl.dispatch(hl.dsp.focus({ window = "address:" .. address }))
 end
 
+-- The shell moves windows with absolute coordinates, which never changes the
+-- monitor or workspace Hyprland files them under. After a drag drops a window
+-- on another monitor, move it to that monitor's active workspace and put the
+-- geometry back (the workspace move shifts floating windows on its own).
+function M.adopt(address, x, y, w, h)
+  local win = hl.get_window("address:" .. address)
+  if not win then return end
+  local cx, cy = x + w / 2, y + math.min(h / 2, 8)
+  for _, m in ipairs(hl.get_monitors()) do
+    local scale = (m.scale and m.scale > 0) and m.scale or 1
+    local mw, mh = m.width / scale, m.height / scale
+    if (tonumber(m.transform) or 0) % 2 == 1 then mw, mh = mh, mw end
+    if cx >= m.x and cx < m.x + mw and cy >= m.y and cy < m.y + mh then
+      if win.monitor and win.monitor.name == m.name then return end
+      local ws = m.active_workspace
+      if not ws then return end
+      local target = "address:" .. address
+      hl.dispatch(hl.dsp.window.move({ workspace = tostring(ws.id), window = target, follow = true }))
+      hl.dispatch(hl.dsp.window.resize({ x = w, y = h, window = target }))
+      hl.dispatch(hl.dsp.window.move({ x = x, y = y, relative = false, window = target }))
+      hl.dispatch(hl.dsp.focus({ window = target }))
+      return
+    end
+  end
+end
+
 -- v0.1 parked windows on special:mf-minimized; move them to the shared one.
 function M.migrate_legacy_minimized()
   for _, w in ipairs(hl.get_windows() or {}) do

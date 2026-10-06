@@ -86,6 +86,11 @@ function evalRestore(address, workspace) {
     return a ? "MOUSE_FIRST.restore(" + luaString(a) + ", " + luaString(workspace || "") + ")" : ""
 }
 
+function evalAdopt(address, r) {
+    var a = normalizeAddress(address)
+    return a && r ? "MOUSE_FIRST.adopt(" + luaString(a) + ", " + int(r.x) + ", " + int(r.y) + ", " + int(r.w) + ", " + int(r.h) + ")" : ""
+}
+
 function evalFloatRule(enabled, center) {
     return "MOUSE_FIRST.set_float_rule(" + (enabled ? "true" : "false") + ", " + (center ? "true" : "false") + ")"
 }
